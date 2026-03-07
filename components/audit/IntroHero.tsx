@@ -1,0 +1,199 @@
+'use client'
+
+/**
+ * IntroHero.tsx — Page d'introduction /audit
+ * Responsive : breakpoint 960px
+ */
+
+import { useRouter } from 'next/navigation'
+import { useWindowWidth } from '@/lib/useWindowWidth'
+
+interface IntroHeroProps {
+  startUrl?: string
+}
+
+export default function IntroHero({ startUrl = '/audit/start' }: IntroHeroProps) {
+  const router = useRouter()
+  const isMobile = useWindowWidth() < 960
+
+  return (
+    <section style={{
+      background: '#050A34',
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {/* Background shapes */}
+      <div style={{
+        position: 'absolute',
+        width: isMobile ? 400 : 700, height: isMobile ? 400 : 700, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(8,92,240,0.18) 0%, transparent 70%)',
+        top: -200, right: -200, pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', width: 400, height: 400, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(175,233,253,0.06) 0%, transparent 70%)',
+        bottom: -100, left: -100, pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', inset: 0, opacity: 0.04,
+        backgroundImage: `linear-gradient(rgba(175,233,253,1) 1px, transparent 1px), linear-gradient(90deg, rgba(175,233,253,1) 1px, transparent 1px)`,
+        backgroundSize: '60px 60px', pointerEvents: 'none',
+      }} />
+
+      {/* Content */}
+      <div style={{
+        position: 'relative', zIndex: 2,
+        textAlign: 'center',
+        maxWidth: isMobile ? '100%' : 720,
+        width: '100%',
+        padding: isMobile ? '60px 24px 48px' : '0 32px',
+        animation: 'fadeUp 0.8s ease both',
+      }}>
+        {/* Badge */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          border: '1px solid rgba(175,233,253,0.3)',
+          background: 'rgba(175,233,253,0.08)',
+          padding: '6px 16px', borderRadius: 100,
+          fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase' as const,
+          color: '#AFE9FD', marginBottom: 20,
+          fontFamily: 'Inter, sans-serif', fontWeight: 500,
+        }}>
+          <span style={{
+            width: 6, height: 6, background: '#4ADE80', borderRadius: '50%',
+            animation: 'pulse 2s infinite', boxShadow: '0 0 8px #4ADE80',
+          }} />
+          Audit Digital Gratuit — Résultat immédiat
+        </div>
+
+        {/* Headline */}
+        <h1 style={{
+          fontFamily: 'Syne, sans-serif',
+          fontSize: isMobile ? '34px' : 'clamp(38px, 5vw, 56px)',
+          fontWeight: 800, lineHeight: 1.1,
+          color: '#FFFFFF', marginBottom: 16,
+          letterSpacing: '-0.02em',
+        }}>
+          Des clients vous cherchent<br />en ligne chaque jour.<br />
+          <span style={{ color: '#AFE9FD' }}>Êtes-vous visible ?</span>
+        </h1>
+
+        {/* Subline */}
+        <p style={{
+          fontSize: isMobile ? 14 : 15,
+          color: 'rgba(175,233,253,0.75)',
+          maxWidth: isMobile ? '100%' : 500,
+          margin: '0 auto 28px',
+          fontWeight: 300, lineHeight: 1.6,
+          fontFamily: 'Inter, sans-serif',
+        }}>
+          Obtenez un diagnostic complet et personnalisé de votre présence digitale en 5 minutes.
+          Score /100, recommandations prioritaires et rapport PDF offert.
+        </p>
+
+        {/* CTA */}
+        <button
+          onClick={() => router.push(startUrl)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            background: '#085CF0', color: '#FFFFFF',
+            padding: '14px 32px', borderRadius: 100,
+            fontSize: 13, fontWeight: 600,
+            fontFamily: 'Syne, sans-serif',
+            letterSpacing: '0.04em', textTransform: 'uppercase' as const,
+            border: 'none', cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            boxShadow: '0 0 40px rgba(8,92,240,0.4)',
+            width: isMobile ? '100%' : 'auto',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#1A6FF5'
+            e.currentTarget.style.boxShadow = '0 0 60px rgba(8,92,240,0.6)'
+            e.currentTarget.style.transform = 'translateY(-2px)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#085CF0'
+            e.currentTarget.style.boxShadow = '0 0 40px rgba(8,92,240,0.4)'
+            e.currentTarget.style.transform = 'translateY(0)'
+          }}
+        >
+          Lancer mon audit gratuit
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        {/* Trust row */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: isMobile ? 10 : 28,
+          marginTop: 28, flexWrap: 'wrap' as const,
+        }}>
+          {TRUST_ITEMS.map((item, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 12, color: 'rgba(175,233,253,0.6)',
+              fontFamily: 'Inter, sans-serif',
+            }}>
+              <span style={{ color: '#AFE9FD', opacity: 0.8 }}>{item.icon}</span>
+              {item.label}
+            </div>
+          ))}
+        </div>
+
+        {/* Stats bar */}
+        <div style={{
+          display: 'flex', gap: 1,
+          marginTop: 32,
+          border: '1px solid rgba(175,233,253,0.12)',
+          borderRadius: 14, overflow: 'hidden',
+          background: 'rgba(175,233,253,0.04)',
+          maxWidth: isMobile ? '100%' : 560,
+          marginLeft: 'auto', marginRight: 'auto',
+        }}>
+          {STATS.map((s, i) => (
+            <div key={i} style={{
+              flex: 1,
+              padding: isMobile ? '12px 8px' : '14px 16px',
+              textAlign: 'center',
+              borderRight: i < STATS.length - 1 ? '1px solid rgba(175,233,253,0.08)' : 'none',
+            }}>
+              <span style={{
+                fontFamily: 'Syne, sans-serif',
+                fontSize: isMobile ? 17 : 20,
+                fontWeight: 700, color: '#FFFFFF', display: 'block',
+              }}>{s.num}</span>
+              <span style={{ fontSize: isMobile ? 10 : 11, color: 'rgba(175,233,253,0.5)', marginTop: 2, display: 'block' }}>
+                {s.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500&display=swap');
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.85); } }
+        * { box-sizing: border-box; }
+      `}</style>
+    </section>
+  )
+}
+
+const TRUST_ITEMS = [
+  { label: '5 minutes chrono', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg> },
+  { label: 'Résultat immédiat', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+  { label: 'Rapport PDF premium', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg> },
+  { label: '100% confidentiel', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg> },
+]
+
+const STATS = [
+  { num: '+200', label: 'Audits réalisés' },
+  { num: '5 min', label: 'Temps moyen' },
+  { num: '94%', label: 'Satisfaction client' },
+]

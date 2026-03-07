@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+model Audit {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  businessName String
+  city         String  @default("")
+  sector       String  @default("")
+  activityType String
+
+  scoreGlobal   Int @default(0)
+  scoreSocial   Int @default(0)
+  scoreWeb      Int @default(0)
+  scoreGBP      Int @default(0)
+  scoreFunnel   Int @default(0)
+  scoreBranding Int @default(0)
+
+  fullName String?
+  email    String?
+  phone    String?
+
+  answersJSON Json
+
+  isUnlocked Boolean @default(false)
+  pdfUrl     String?
+
+  @@index([email])
+  @@index([createdAt])
+  @@index([isUnlocked])
+}
