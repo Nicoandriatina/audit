@@ -1,19 +1,13 @@
-/**
- * lib/email.ts
- * Envoi d'emails transactionnels via Resend.
- * Dépendance : npm install resend
- * Variable d'env : RESEND_API_KEY, NEXT_PUBLIC_APP_URL
- */
-
 import { Resend } from 'resend'
 import type { Recommendation } from '@/components/audit/Recommendations'
 import { getScoreLevel, SCORE_LABELS, SCORE_MESSAGES } from './scoring'
+import type { CompetitorsAnalysis } from './competitors'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-const FROM_EMAIL = process.env.RESEND_FROM ?? 'Cabinet Stratège <audit@cabinet-stratege.ch>'
-const CAL_LINK = process.env.NEXT_PUBLIC_CAL_LINK ?? 'https://cal.com/cabinet-stratege'
+const APP_URL   = process.env.NEXT_PUBLIC_APP_URL  ?? 'http://localhost:3000'
+const FROM_EMAIL = process.env.RESEND_FROM         ?? 'Cabinet Stratège <audit@cabinet-stratege.ch>'
+const CAL_LINK  = process.env.NEXT_PUBLIC_CAL_LINK ?? 'https://cal.com/cabinet-stratege'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,9 +24,18 @@ interface SendAuditEmailParams {
   scoreFunnel: number
   scoreBranding: number
   recommendations: Recommendation[]
+  // v2 — sectoriel + clients perdus
+  sectorPercentile?: number
+  sectorBenchmarks?: { avgScore: number; topQuartile: number; median: number }
+  yearlyLostRevenue?: number
+  monthlyLostLeads?: number
+  yearlyPotentialGain?: number
+  lostRange?: { low: number; mid: number; high: number }
+  // v3 — concurrents locaux
+  competitorsAnalysis?: CompetitorsAnalysis
 }
 
-// ─── Score color helper ───────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function scoreColor(score: number, outOf = 100): string {
   const pct = (score / outOf) * 100
@@ -41,16 +44,10 @@ function scoreColor(score: number, outOf = 100): string {
   return '#2B9348'
 }
 
-function pilierBar(score: number, max = 20): string {
-  const pct = Math.round((score / max) * 100)
-  const color = scoreColor(score, max)
-  return `
-    <div style="margin-bottom:14px;">
-      <div style="height:6px;background:#EDE8DF;border-radius:3px;overflow:hidden;">
-        <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
-      </div>
-    </div>
-  `
+function fmtEur(n: number): string {
+  if (n >= 1_000_000) return `CHF ${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `CHF ${Math.round(n / 1_000)}k`
+  return `CHF ${n}`
 }
 
 // ─── Email template ───────────────────────────────────────────────────────────
@@ -60,20 +57,23 @@ function buildHtml(params: SendAuditEmailParams): string {
     fullName, businessName, city, auditId,
     scoreGlobal, scoreSocial, scoreWeb, scoreGBP, scoreFunnel, scoreBranding,
     recommendations,
+    sectorPercentile, sectorBenchmarks,
+    yearlyLostRevenue, monthlyLostLeads, yearlyPotentialGain, lostRange,
+    competitorsAnalysis,
   } = params
 
-  const level = getScoreLevel(scoreGlobal)
-  const levelLabel = SCORE_LABELS[level]
+  const level        = getScoreLevel(scoreGlobal)
+  const levelLabel   = SCORE_LABELS[level]
   const levelMessage = SCORE_MESSAGES[level]
-  const globalColor = scoreColor(scoreGlobal)
-  const resultUrl = `${APP_URL}/audit/result?id=${auditId}`
-  const pdfUrl = `${APP_URL}/api/pdf/${auditId}`
+  const globalColor  = scoreColor(scoreGlobal)
+  const resultUrl    = `${APP_URL}/audit/result?id=${auditId}`
+  const pdfUrl       = `${APP_URL}/api/pdf/${auditId}`
 
   const piliers = [
-    { name: 'Réseaux sociaux', score: scoreSocial },
-    { name: 'Présence Web & SEO', score: scoreWeb },
-    { name: 'Google Business', score: scoreGBP },
-    { name: 'Acquisition & Funnel', score: scoreFunnel },
+    { name: 'Réseaux sociaux',        score: scoreSocial   },
+    { name: 'Présence Web & SEO',     score: scoreWeb      },
+    { name: 'Google Business',        score: scoreGBP      },
+    { name: 'Acquisition & Funnel',   score: scoreFunnel   },
     { name: 'Branding & Crédibilité', score: scoreBranding },
   ]
 
@@ -81,23 +81,107 @@ function buildHtml(params: SendAuditEmailParams): string {
     .map(
       (r, i) => `
       <div style="border:1.5px solid #EDE8DF;border-radius:12px;padding:18px 20px;margin-bottom:12px;">
-        <div style="display:flex;align-items:flex-start;gap:14px;">
-          <div style="width:28px;height:28px;border-radius:8px;background:${i === 0 ? 'rgba(224,49,49,0.1)' : i === 1 ? 'rgba(232,137,12,0.1)' : 'rgba(8,92,240,0.08)'};
-            color:${i === 0 ? '#E03131' : i === 1 ? '#E8890C' : '#085CF0'};
-            display:flex;align-items:center;justify-content:center;flex-shrink:0;
-            font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;">
-            P${i + 1}
-          </div>
-          <div style="flex:1;">
-            <div style="font-size:13px;font-weight:600;color:#050A34;margin-bottom:4px;">${r.problem}</div>
-            <div style="font-size:12px;color:#7A82A0;margin-bottom:8px;">${r.businessImpact}</div>
-            <div style="font-size:12px;color:#085CF0;font-weight:500;">→ ${r.action}</div>
-          </div>
-        </div>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="width:36px;vertical-align:top;">
+              <div style="width:28px;height:28px;border-radius:8px;
+                background:${i === 0 ? 'rgba(224,49,49,0.1)' : i === 1 ? 'rgba(232,137,12,0.1)' : 'rgba(8,92,240,0.08)'};
+                color:${i === 0 ? '#E03131' : i === 1 ? '#E8890C' : '#085CF0'};
+                text-align:center;line-height:28px;font-size:11px;font-weight:700;
+                font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                P${i + 1}
+              </div>
+            </td>
+            <td style="padding-left:10px;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#050A34;margin-bottom:4px;">${r.problem}</div>
+              <div style="font-size:12px;color:#7A82A0;margin-bottom:8px;">${r.businessImpact}</div>
+              <div style="font-size:12px;color:#085CF0;font-weight:500;">→ ${r.action}</div>
+            </td>
+          </tr>
+        </table>
       </div>
     `
     )
     .join('')
+
+  // ── Bloc concurrents (v3) ─────────────────────────────────────────────────
+  const competitorsBlock = competitorsAnalysis ? (() => {
+    const { competitors, clientRank, summary, gapToLeader, avgCompetitorScore } = competitorsAnalysis
+
+    const rankBg    = clientRank === 1 ? 'rgba(43,147,72,0.08)'  : clientRank <= 2 ? 'rgba(232,160,32,0.08)' : 'rgba(224,49,49,0.06)'
+    const rankColor = clientRank === 1 ? '#2B9348'               : clientRank <= 2 ? '#B87A00'               : '#C92A2A'
+    const rankLabel = clientRank === 1 ? '🏆 1ᵉʳ de votre marché' : `${clientRank}ᵉ position sur ${competitors.length + 1}`
+
+    const maxScore = Math.max(scoreGlobal, ...competitors.map(c => c.score), 100)
+
+    const playerRows = [
+      { name: businessName.length > 20 ? businessName.slice(0, 18) + '…' : businessName, score: scoreGlobal, isClient: true,  color: '#085CF0' },
+      ...competitors.map(c => ({ name: c.name.length > 22 ? c.name.slice(0, 20) + '…' : c.name, score: c.score, isClient: false, color: c.rankColor })),
+    ].sort((a, b) => b.score - a.score)
+
+    const playerRowsHtml = playerRows.map(p => {
+      const barPct = Math.round((p.score / maxScore) * 100)
+      return `
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
+          <tr>
+            <td style="font-size:12px;color:${p.isClient ? '#050A34' : '#7A82A0'};font-weight:${p.isClient ? '600' : '400'};">
+              ${p.isClient ? `<span style="display:inline-block;background:#085CF0;color:white;font-size:9px;font-weight:700;padding:1px 7px;border-radius:100px;margin-right:6px;">VOUS</span>` : ''}${p.name}
+            </td>
+            <td align="right" style="font-size:12px;font-weight:700;color:${p.isClient ? '#085CF0' : '#7A82A0'};white-space:nowrap;">${p.score}<span style="font-size:10px;font-weight:400;color:#9BA3BC;">/100</span></td>
+          </tr>
+          <tr><td colspan="2" style="padding-top:5px;">
+            <div style="height:${p.isClient ? '8' : '5'}px;background:#EDE8DF;border-radius:4px;overflow:hidden;">
+              <div style="height:100%;width:${barPct}%;background:${p.isClient ? 'linear-gradient(90deg,#085CF0,#4A8FFF)' : p.color};border-radius:4px;opacity:${p.isClient ? '1' : '0.65'};"></div>
+            </div>
+          </td></tr>
+        </table>
+      `
+    }).join('')
+
+    return `
+        <!-- Concurrents locaux v3 -->
+        <tr>
+          <td style="background:white;padding:0 40px 32px;border-top:1px solid #F5F0E8;">
+            <p style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#092676;margin:0 0 16px;">
+              Concurrents locaux
+            </p>
+
+            <!-- Rank badge -->
+            <div style="display:inline-block;padding:6px 16px;border-radius:100px;
+              background:${rankBg};border:1px solid ${rankColor}33;margin-bottom:18px;">
+              <span style="font-size:13px;font-weight:700;color:${rankColor};">${rankLabel}</span>
+            </div>
+
+            <!-- Barres de score -->
+            ${playerRowsHtml}
+
+            <!-- 2 metrics -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;margin-bottom:16px;">
+              <tr>
+                <td width="48%" align="center" style="padding:10px 12px;background:#F8F7F5;border:1px solid #EDE8DF;border-radius:10px;">
+                  <div style="font-size:15px;font-weight:700;color:${scoreGlobal >= avgCompetitorScore ? '#2B9348' : '#E03131'};">
+                    ${scoreGlobal >= avgCompetitorScore ? '+' : ''}${scoreGlobal - avgCompetitorScore} pts
+                  </div>
+                  <div style="font-size:10px;color:#9BA3BC;margin-top:2px;">vs moy. concurrents (${avgCompetitorScore}/100)</div>
+                </td>
+                <td width="4%"></td>
+                <td width="48%" align="center" style="padding:10px 12px;background:#F8F7F5;border:1px solid #EDE8DF;border-radius:10px;">
+                  <div style="font-size:15px;font-weight:700;color:${gapToLeader === 0 ? '#2B9348' : '#E03131'};">
+                    ${gapToLeader === 0 ? '🏆 Leader' : `${gapToLeader} pts`}
+                  </div>
+                  <div style="font-size:10px;color:#9BA3BC;margin-top:2px;">${gapToLeader === 0 ? 'Vous êtes en tête' : 'Écart au leader'}</div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Résumé -->
+            <div style="padding:12px 16px;background:rgba(9,38,118,0.04);border:1px solid rgba(9,38,118,0.08);border-radius:10px;">
+              <p style="font-size:12px;color:#3D4A6B;line-height:1.6;margin:0;">${summary}</p>
+            </div>
+          </td>
+        </tr>
+    `
+  })() : ''
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -119,11 +203,17 @@ function buildHtml(params: SendAuditEmailParams): string {
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td>
-                  <div style="display:inline-flex;align-items:center;gap:10px;">
-                    <span style="display:inline-block;width:32px;height:32px;background:#085CF0;border-radius:8px;
-                      color:white;font-size:13px;font-weight:900;text-align:center;line-height:32px;">CS</span>
-                    <span style="font-size:14px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:white;">Cabinet Stratège</span>
-                  </div>
+                  <table cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="width:32px;">
+                        <div style="width:32px;height:32px;background:#085CF0;border-radius:8px;
+                          color:white;font-size:13px;font-weight:900;text-align:center;line-height:32px;">CS</div>
+                      </td>
+                      <td style="padding-left:10px;">
+                        <span style="font-size:14px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:white;">Cabinet Stratège</span>
+                      </td>
+                    </tr>
+                  </table>
                 </td>
               </tr>
               <tr><td style="padding-top:28px;">
@@ -146,12 +236,10 @@ function buildHtml(params: SendAuditEmailParams): string {
               <tr>
                 <td style="width:100px;vertical-align:middle;">
                   <div style="width:88px;height:88px;border-radius:50%;border:6px solid ${globalColor};
-                    display:flex;align-items:center;justify-content:center;background:white;text-align:center;
-                    box-shadow:0 0 0 4px ${globalColor}20;">
-                    <div>
-                      <div style="font-size:30px;font-weight:800;color:${globalColor};line-height:1;">${scoreGlobal}</div>
-                      <div style="font-size:11px;color:#7A82A0;">/100</div>
-                    </div>
+                    text-align:center;background:white;box-shadow:0 0 0 4px ${globalColor}20;
+                    padding-top:20px;box-sizing:border-box;">
+                    <div style="font-size:30px;font-weight:800;color:${globalColor};line-height:1;">${scoreGlobal}</div>
+                    <div style="font-size:11px;color:#7A82A0;">/100</div>
                   </div>
                 </td>
                 <td style="padding-left:24px;vertical-align:middle;">
@@ -202,6 +290,103 @@ function buildHtml(params: SendAuditEmailParams): string {
             ${recoItems}
           </td>
         </tr>
+
+        <!-- Benchmark sectoriel v2 -->
+        ${(sectorPercentile != null && sectorBenchmarks != null) ? `
+        <tr>
+          <td style="background:white;padding:0 40px 32px;border-top:1px solid #F5F0E8;">
+            <p style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#092676;margin:0 0 16px;">
+              Position sectorielle
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+              <tr>
+                <td style="font-size:12px;color:#050A34;font-weight:500;">
+                  ${sectorPercentile >= 75
+                    ? `Top ${100 - sectorPercentile}% de votre secteur`
+                    : `Meilleur que ${sectorPercentile}% des entreprises de votre secteur`}
+                </td>
+                <td align="right" style="font-size:12px;font-weight:700;color:${sectorPercentile >= 75 ? '#2B9348' : sectorPercentile >= 50 ? '#E8890C' : '#E03131'};">
+                  ${sectorPercentile}/100
+                </td>
+              </tr>
+              <tr><td colspan="2" style="padding-top:6px;">
+                <div style="height:8px;background:#EDE8DF;border-radius:4px;overflow:hidden;">
+                  <div style="height:8px;width:${sectorPercentile}%;background:${sectorPercentile >= 75 ? '#2B9348' : sectorPercentile >= 50 ? '#E8890C' : '#E03131'};border-radius:4px;"></div>
+                </div>
+              </td></tr>
+            </table>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="32%" align="center" style="padding:12px 8px;background:#F5F0E8;border-radius:10px;">
+                  <div style="font-size:20px;font-weight:800;color:${sectorPercentile >= 75 ? '#2B9348' : sectorPercentile >= 50 ? '#E8890C' : '#E03131'};">${scoreGlobal}</div>
+                  <div style="font-size:10px;color:#7A82A0;margin-top:2px;">Votre score</div>
+                </td>
+                <td width="4%"></td>
+                <td width="32%" align="center" style="padding:12px 8px;background:#F5F0E8;border-radius:10px;">
+                  <div style="font-size:20px;font-weight:800;color:#E8890C;">${sectorBenchmarks.avgScore}</div>
+                  <div style="font-size:10px;color:#7A82A0;margin-top:2px;">Moyenne secteur</div>
+                </td>
+                <td width="4%"></td>
+                <td width="32%" align="center" style="padding:12px 8px;background:#F5F0E8;border-radius:10px;">
+                  <div style="font-size:20px;font-weight:800;color:#2B9348;">${sectorBenchmarks.topQuartile}</div>
+                  <div style="font-size:10px;color:#7A82A0;margin-top:2px;">Top 25%</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        ` : ''}
+
+        <!-- Clients perdus v2 -->
+        ${(yearlyLostRevenue != null && yearlyLostRevenue > 0) ? (() => {
+          const urgencyColor = yearlyLostRevenue > 50_000 ? '#E03131' : yearlyLostRevenue > 15_000 ? '#E8890C' : '#085CF0'
+          return `
+        <tr>
+          <td style="background:white;padding:0 40px 32px;border-top:1px solid #F5F0E8;">
+            <p style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#092676;margin:0 0 16px;">
+              Impact financier estimé
+            </p>
+            <div style="background:${urgencyColor}08;border:1.5px solid ${urgencyColor}30;border-radius:12px;padding:20px 24px;margin-bottom:16px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:${urgencyColor};margin-bottom:6px;">
+                      CA potentiel non capturé / an
+                    </div>
+                    <div style="font-size:28px;font-weight:800;color:${urgencyColor};line-height:1;">${fmtEur(yearlyLostRevenue)}</div>
+                    ${lostRange ? `<div style="font-size:11px;color:#7A82A0;margin-top:6px;">Fourchette : ${fmtEur(lostRange.low)} — ${fmtEur(lostRange.high)}</div>` : ''}
+                  </td>
+                  <td align="center" style="padding-left:20px;white-space:nowrap;">
+                    <div style="font-size:26px;font-weight:800;color:${urgencyColor};">${monthlyLostLeads ?? 0}</div>
+                    <div style="font-size:10px;color:#7A82A0;">clients/mois</div>
+                  </td>
+                </tr>
+              </table>
+            </div>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="32%" align="center" style="padding:12px 8px;border:1px solid #EDE8DF;border-radius:10px;">
+                  <div style="font-size:14px;font-weight:700;color:#050A34;">${fmtEur(Math.round(yearlyLostRevenue / 12))}</div>
+                  <div style="font-size:10px;color:#7A82A0;margin-top:2px;">Perdu / mois</div>
+                </td>
+                <td width="4%"></td>
+                <td width="32%" align="center" style="padding:12px 8px;border:1px solid #EDE8DF;border-radius:10px;">
+                  <div style="font-size:14px;font-weight:700;color:#050A34;">${fmtEur(yearlyLostRevenue)}</div>
+                  <div style="font-size:10px;color:#7A82A0;margin-top:2px;">Perdu / an</div>
+                </td>
+                <td width="4%"></td>
+                <td width="32%" align="center" style="padding:12px 8px;border:1px solid #EDE8DF;border-radius:10px;">
+                  <div style="font-size:14px;font-weight:700;color:#2B9348;">${yearlyPotentialGain != null ? fmtEur(yearlyPotentialGain) : 'N/A'}</div>
+                  <div style="font-size:10px;color:#7A82A0;margin-top:2px;">Gain potentiel</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+          `
+        })() : ''}
+
+        ${competitorsBlock}
 
         <!-- CTAs -->
         <tr>

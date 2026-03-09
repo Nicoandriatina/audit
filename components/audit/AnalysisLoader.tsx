@@ -1,10 +1,5 @@
 'use client'
 
-/**
- * AnalysisLoader.tsx — Écran d'animation "Analyse en cours"
- * Responsive : breakpoint 960px
- */
-
 import { useEffect, useRef, useState } from 'react'
 import { useWindowWidth } from '@/lib/useWindowWidth'
 
@@ -92,77 +87,145 @@ export default function AnalysisLoader({ answers, onComplete, onError }: Analysi
     return () => clearInterval(interval)
   }, []) // eslint-disable-line
 
-  const RADIUS = isMobile ? 44 : 54
-  const SIZE = isMobile ? 104 : 128
+  const RADIUS = isMobile ? 44 : 56
+  const SIZE = isMobile ? 104 : 132
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS
   const dashOffset = CIRCUMFERENCE - (progress / 100) * CIRCUMFERENCE
 
   return (
     <div style={{
-      minHeight: '100vh', paddingTop: 64,
+      width: '100vw',
+      height: '100vh',
       background: '#050A34',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       position: 'relative', overflow: 'hidden',
     }}>
+      {/* Background glow central */}
       <div style={{
         position: 'absolute', width: 700, height: 700, borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(8,92,240,0.12) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(8,92,240,0.14) 0%, transparent 70%)',
         top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none',
       }} />
+      {/* Glow coin haut-droit */}
       <div style={{
-        position: 'absolute', inset: 0, opacity: 0.025,
+        position: 'absolute', width: 500, height: 500, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(8,92,240,0.10) 0%, transparent 70%)',
+        top: -180, right: -180, pointerEvents: 'none',
+      }} />
+      {/* Glow coin bas-gauche */}
+      <div style={{
+        position: 'absolute', width: 360, height: 360, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(175,233,253,0.05) 0%, transparent 70%)',
+        bottom: -100, left: -100, pointerEvents: 'none',
+      }} />
+      {/* Grille */}
+      <div style={{
+        position: 'absolute', inset: 0, opacity: 0.03,
         backgroundImage: `linear-gradient(rgba(175,233,253,1) 1px, transparent 1px), linear-gradient(90deg, rgba(175,233,253,1) 1px, transparent 1px)`,
         backgroundSize: '60px 60px', pointerEvents: 'none',
       }} />
 
+      {/* Card centrale */}
       <div style={{
         position: 'relative', zIndex: 2,
-        maxWidth: 520, width: '100%',
-        padding: isMobile ? '40px 20px' : '60px 32px',
-        animation: 'fadeUp 0.6s ease both', textAlign: 'center',
+        width: isMobile ? '100%' : 540,
+        padding: isMobile ? '40px 24px' : '52px 48px',
+        background: 'rgba(255,255,255,0.025)',
+        border: '1px solid rgba(175,233,253,0.08)',
+        borderRadius: isMobile ? 0 : 24,
+        backdropFilter: 'blur(12px)',
+        animation: 'fadeUp 0.7s ease both',
+        textAlign: 'center',
       }}>
         {/* SVG Ring */}
-        <div style={{ position: 'relative', width: SIZE, height: SIZE, margin: `0 auto ${isMobile ? 28 : 40}px` }}>
+        <div style={{ position: 'relative', width: SIZE, height: SIZE, margin: `0 auto ${isMobile ? 24 : 32}px` }}>
           <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="rgba(175,233,253,0.08)" strokeWidth="8" />
-            <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="#085CF0" strokeWidth="8"
-              strokeLinecap="round" strokeDasharray={CIRCUMFERENCE} strokeDashoffset={dashOffset}
-              style={{ transition: 'stroke-dashoffset 0.1s linear', filter: 'drop-shadow(0 0 8px rgba(8,92,240,0.6))' }} />
+            <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="rgba(175,233,253,0.07)" strokeWidth="8" />
+            <circle
+              cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none"
+              stroke="url(#ringGrad)" strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={dashOffset}
+              style={{ transition: 'stroke-dashoffset 0.1s linear', filter: 'drop-shadow(0 0 10px rgba(8,92,240,0.7))' }}
+            />
+            <defs>
+              <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#085CF0" />
+                <stop offset="100%" stopColor="#AFE9FD" />
+              </linearGradient>
+            </defs>
           </svg>
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ fontFamily: 'Syne, sans-serif', fontSize: isMobile ? 24 : 30, fontWeight: 800, color: 'white', lineHeight: 1 }}>
+            <span style={{
+              fontFamily: 'Syne, sans-serif',
+              fontSize: isMobile ? 26 : 32,
+              fontWeight: 800, color: 'white', lineHeight: 1,
+            }}>
               {progress}
             </span>
             <span style={{ fontSize: 12, color: 'rgba(175,233,253,0.4)', marginTop: 2 }}>%</span>
           </div>
         </div>
 
-        <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: isMobile ? 26 : 32, fontWeight: 700, color: 'white', marginBottom: 10 }}>
+        {/* Titre */}
+        <h2 style={{
+          fontFamily: 'Syne, sans-serif',
+          fontSize: isMobile ? 26 : 30,
+          fontWeight: 700, color: 'white', marginBottom: 8, letterSpacing: '-0.01em',
+        }}>
           Analyse en cours…
         </h2>
-        <p style={{ fontSize: isMobile ? 13 : 15, color: 'rgba(175,233,253,0.55)', marginBottom: isMobile ? 32 : 52, fontWeight: 300, lineHeight: 1.6, fontFamily: 'Inter, sans-serif' }}>
+        <p style={{
+          fontSize: isMobile ? 13 : 14,
+          color: 'rgba(175,233,253,0.55)',
+          marginBottom: isMobile ? 24 : 32,
+          fontWeight: 300, lineHeight: 1.6,
+          fontFamily: 'Inter, sans-serif',
+        }}>
           Votre rapport est généré en temps réel
         </p>
 
         {/* Progress bar */}
-        <div style={{ height: 6, background: 'rgba(175,233,253,0.08)', borderRadius: 3, overflow: 'hidden', marginBottom: isMobile ? 28 : 48 }}>
-          <div style={{ height: '100%', background: 'linear-gradient(90deg, #085CF0, #AFE9FD)', borderRadius: 3, width: `${progress}%`, transition: 'width 0.1s linear' }} />
+        <div style={{
+          height: 5, background: 'rgba(175,233,253,0.07)',
+          borderRadius: 3, overflow: 'hidden',
+          marginBottom: isMobile ? 20 : 28,
+        }}>
+          <div style={{
+            height: '100%',
+            background: 'linear-gradient(90deg, #085CF0, #AFE9FD)',
+            borderRadius: 3,
+            width: `${progress}%`,
+            transition: 'width 0.1s linear',
+          }} />
         </div>
 
         {/* Steps list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {ANALYSE_STEPS.map((step, i) => {
             const isDone = i < activeStep
             const isActive = i === activeStep
             return (
               <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 16,
-                padding: isMobile ? '12px 14px' : '14px 18px', borderRadius: 12, textAlign: 'left',
-                background: isDone ? 'rgba(74,222,128,0.06)' : isActive ? 'rgba(8,92,240,0.15)' : 'rgba(175,233,253,0.02)',
-                border: `1px solid ${isDone ? 'rgba(74,222,128,0.15)' : isActive ? 'rgba(8,92,240,0.3)' : 'rgba(175,233,253,0.05)'}`,
+                display: 'flex', alignItems: 'center', gap: isMobile ? 12 : 14,
+                padding: isMobile ? '11px 14px' : '13px 16px',
+                borderRadius: 12, textAlign: 'left',
+                background: isDone
+                  ? 'rgba(74,222,128,0.06)'
+                  : isActive
+                  ? 'rgba(8,92,240,0.15)'
+                  : 'rgba(175,233,253,0.02)',
+                border: `1px solid ${
+                  isDone
+                    ? 'rgba(74,222,128,0.15)'
+                    : isActive
+                    ? 'rgba(8,92,240,0.3)'
+                    : 'rgba(175,233,253,0.05)'
+                }`,
                 transition: 'all 0.4s ease',
               }}>
                 <span style={{
@@ -174,18 +237,25 @@ export default function AnalysisLoader({ answers, onComplete, onError }: Analysi
                   transition: 'all 0.3s',
                 }}>
                   {isDone ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
                   ) : isActive ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 0.8s linear infinite' }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                      style={{ animation: 'spin 0.8s linear infinite' }}>
                       <path d="M21 12a9 9 0 11-6.219-8.56" />
                     </svg>
                   ) : step.icon}
                 </span>
                 <span style={{
-                  fontSize: isMobile ? 13 : 14, fontFamily: 'Inter, sans-serif',
+                  fontSize: isMobile ? 13 : 14,
+                  fontFamily: 'Inter, sans-serif',
                   color: isDone ? 'rgba(74,222,128,0.75)' : isActive ? '#FFFFFF' : 'rgba(175,233,253,0.25)',
-                  fontWeight: isActive ? 500 : 400, transition: 'color 0.3s',
-                }}>{step.label}</span>
+                  fontWeight: isActive ? 500 : 400,
+                  transition: 'color 0.3s',
+                }}>
+                  {step.label}
+                </span>
               </div>
             )
           })}
@@ -194,9 +264,15 @@ export default function AnalysisLoader({ answers, onComplete, onError }: Analysi
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500&display=swap');
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        * { box-sizing: border-box; }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
       `}</style>
     </div>
   )

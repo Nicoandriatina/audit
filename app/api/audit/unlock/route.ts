@@ -1,27 +1,10 @@
-
-/**
- * app/api/audit/unlock/route.ts
- * POST /api/audit/unlock
- *
- * Body (JSON) :
- *   { auditId: string, fullName: string, email: string, phone: string }
- *
- * Response 200 :
- *   { audit: AuditPublic, recommendations: Recommendation[] }
- *
- * Flow :
- *  1. Valider body
- *  2. Récupérer l'audit en DB
- *  3. Mettre à jour : fullName, email, phone, isUnlocked = true
- *  4. Générer recommandations via lib/recommendations.ts
- *  5. Envoyer l'email client + notif interne via lib/email.ts (async, non-bloquant)
- *  6. Retourner audit + recommendations
- */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateRecommendations } from '@/lib/recommendations'
 import { sendAuditEmail, sendLeadNotificationEmail } from '@/lib/email'
+import { getSectorTemplate, getSectorPercentile } from '@/lib/sector-templates'
+import type { LostClientsEstimate } from '@/lib/lost-clients'
+import type { CompetitorsAnalysis } from '@/lib/competitors'
 import type { AuditAnswers, AuditScores } from '@/lib/scoring'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,6 +95,25 @@ export async function POST(req: NextRequest) {
         scoreFunnel:   scores.funnel,
         scoreBranding: scores.branding,
         recommendations,
+        // v2 — données sectorielles
+        sectorPercentile: (() => {
+          try {
+            const t = getSectorTemplate(existingAudit.sector ?? '')
+            return existingAudit.sectorPercentile ?? getSectorPercentile(scores.global, t).percentile
+          } catch { return undefined }
+        })(),
+        sectorBenchmarks: (() => {
+          try { return getSectorTemplate(existingAudit.sector ?? '').benchmarks }
+          catch { return undefined }
+        })(),
+        yearlyLostRevenue:    (existingAudit.lostClientsJSON as unknown as LostClientsEstimate)?.yearlyLostRevenue,
+        monthlyLostLeads:     (existingAudit.lostClientsJSON as unknown as LostClientsEstimate)?.monthlyLostLeads,
+        yearlyPotentialGain:  (existingAudit.lostClientsJSON as unknown as LostClientsEstimate)?.yearlyPotentialGain,
+        lostRange:            (existingAudit.lostClientsJSON as unknown as LostClientsEstimate)?.range,
+        // v3 — concurrents
+        competitorsAnalysis: (existingAudit as Record<string, unknown>).competitorsJSON
+          ? (existingAudit as Record<string, unknown>).competitorsJSON as unknown as CompetitorsAnalysis
+          : undefined,
       }).catch((e) => console.error('[unlock] sendAuditEmail error:', e)),
 
       sendLeadNotificationEmail({
@@ -125,24 +127,44 @@ export async function POST(req: NextRequest) {
       }).catch((e) => console.error('[unlock] sendLeadNotificationEmail error:', e)),
     ])
 
-    // ── 7. Réponse ─────────────────────────────────────────────────────────
+    // ── 7. Template sectoriel pour les champs live ─────────────────────────
+    const template = getSectorTemplate(existingAudit.sector ?? '')
+
+    // ── 8. Réponse — tous les champs v2/v3 inclus ───────────────────────
+    // CRITIQUE : handleUnlocked dans page.tsx fait { ...prev, ...data.audit }
+    // Si on omet un champ ici, il écrase la valeur déjà chargée par GET /api/audit/[id]
+    // → competitorsJSON, lostClientsJSON, sectorPercentile DOIVENT être présents
     return NextResponse.json({
       audit: {
+        // ── Identité
         id:           updatedAudit.id,
         businessName: updatedAudit.businessName,
         city:         updatedAudit.city,
         sector:       updatedAudit.sector,
         activityType: updatedAudit.activityType,
-        scoreGlobal:  updatedAudit.scoreGlobal,
-        scoreSocial:  updatedAudit.scoreSocial,
-        scoreWeb:     updatedAudit.scoreWeb,
-        scoreGBP:     updatedAudit.scoreGBP,
-        scoreFunnel:  updatedAudit.scoreFunnel,
-        scoreBranding: updatedAudit.scoreBranding,
-        isUnlocked:   true,
-        fullName:     updatedAudit.fullName,
-        email:        updatedAudit.email,
-        phone:        updatedAudit.phone,
+        // ── Scores
+        scoreGlobal:    updatedAudit.scoreGlobal,
+        scoreGlobalRaw: (updatedAudit as Record<string, unknown>).scoreGlobalRaw as number ?? updatedAudit.scoreGlobal,
+        scoreSocial:    updatedAudit.scoreSocial,
+        scoreWeb:       updatedAudit.scoreWeb,
+        scoreGBP:       updatedAudit.scoreGBP,
+        scoreFunnel:    updatedAudit.scoreFunnel,
+        scoreBranding:  updatedAudit.scoreBranding,
+        // ── Lead
+        isUnlocked: true,
+        fullName:   updatedAudit.fullName,
+        email:      updatedAudit.email,
+        phone:      updatedAudit.phone,
+        // ── v2 sectoriel
+        sectorTemplateId: (existingAudit as Record<string, unknown>).sectorTemplateId as string ?? template.id,
+        sectorPercentile: (existingAudit as Record<string, unknown>).sectorPercentile as number ?? null,
+        lostClientsJSON:  (existingAudit as Record<string, unknown>).lostClientsJSON ?? null,
+        sectorBenchmarks: template.benchmarks,
+        sectorTips:       template.sectorTips,
+        // ── v3 concurrents
+        competitorsJSON: (existingAudit as Record<string, unknown>).competitorsJSON ?? null,
+        // ── Answers (pour fallback client-side)
+        answersJSON: existingAudit.answersJSON,
       },
       recommendations,
     })

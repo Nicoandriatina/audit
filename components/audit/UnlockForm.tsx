@@ -1,18 +1,5 @@
 'use client'
 
-/**
- * UnlockForm.tsx
- * Formulaire de capture lead — déblocage du résultat complet.
- * Affiché sur fond navy à droite, avec l'aperçu flou à gauche.
- *
- * Usage :
- *   <UnlockForm
- *     auditId="clxxx"
- *     previewScore={72}
- *     onUnlocked={(data) => { ... }}
- *   />
- */
-
 import { useState } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -1,11 +1,6 @@
 
 'use client'
 
-/**
- * ScoreDisplay.tsx — Score global (anneau SVG) + barres par pilier
- * Responsive : breakpoint 960px (hero en colonne, padding réduit)
- */
-
 import { useEffect, useState } from 'react'
 import { useWindowWidth } from '@/lib/useWindowWidth'
 

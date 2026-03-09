@@ -1,11 +1,5 @@
-'use client'
 
-/**
- * app/audit/result/page.tsx — Page résultat
- * Responsive : breakpoint 960px
- * - État locked  : colonne unique, partie floutée cachée
- * - État unlocked: hero en colonne, body 1 colonne
- */
+'use client'
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -16,21 +10,121 @@ import UnlockForm, { type LeadData } from '@/components/audit/UnlockForm'
 import RadarChart from '@/components/audit/RadarChart'
 import Recommendations, { type Recommendation } from '@/components/audit/Recommendations'
 import BookingCTA from '@/components/audit/BookingCTA'
+import LostClientsCard from '@/components/audit/LostClientsCard'
+import SectorBenchmark from '@/components/audit/SectorBenchmark'
+import CompetitorCard from '@/components/audit/CompetitorCard'
+
+import { getSectorTemplate, getSectorPercentile, calculateWeightedScore } from '@/lib/sector-templates'
+import { estimateLostClients, getLostClientsMessage } from '@/lib/lost-clients'
+import type { LostClientsEstimate } from '@/lib/lost-clients'
+import type { CompetitorsAnalysis } from '@/lib/competitors'
+import type { AuditAnswers } from '@/types/audit'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface SectorBenchmarks {
+  avgScore:    number
+  topQuartile: number
+  median:      number
+}
 
 interface AuditData {
-  id: string
-  businessName: string
-  city: string
-  sector: string
-  activityType: string
-  scoreGlobal: number
-  scoreSocial: number
-  scoreWeb: number
-  scoreGBP: number
-  scoreFunnel: number
-  scoreBranding: number
-  answersJSON: Record<string, unknown>
+  id:            string
+  businessName:  string
+  city:          string
+  sector:        string
+  activityType:  string
+  scoreGlobal:    number
+  scoreGlobalRaw: number
+  scoreSocial:    number
+  scoreWeb:       number
+  scoreGBP:       number
+  scoreFunnel:    number
+  scoreBranding:  number
+  // v2 sectoriel — retournés par GET /api/audit/[id]
+  sectorTemplateId?:  string
+  sectorPercentile?:  number
+  lostClientsJSON?:   LostClientsEstimate | null
+  sectorBenchmarks?:  SectorBenchmarks
+  sectorTips?:        Record<string, string>
+  // v3 concurrents
+  competitorsJSON?:   CompetitorsAnalysis | null
+  answersJSON?:       Record<string, unknown>  // absent en état locked
+  fullName?:          string
+  email?:             string
+  phone?:             string
 }
+
+// ─── Helpers — fallback calcul client-side ────────────────────────────────────
+
+/**
+ * Pour les audits créés avant Sprint 1 (lostClientsJSON null en DB),
+ * on recalcule les données sectorielles à la volée depuis answersJSON.
+ */
+function computeFallbackSectorData(auditData: AuditData) {
+  const template = getSectorTemplate(auditData.sector)
+
+  const rawScores = {
+    social:   auditData.scoreSocial,
+    web:      auditData.scoreWeb,
+    gbp:      auditData.scoreGBP,
+    funnel:   auditData.scoreFunnel,
+    branding: auditData.scoreBranding,
+  }
+
+  // Contexte bonus construit depuis les champs plats — answersJSON peut être absent
+  // (GET /api/audit/[id] ne le retourne pas pour alléger la réponse)
+  const rawAnswers = auditData.answersJSON as unknown as AuditAnswers | undefined
+  const bonusCtx = {
+    activityType:          (auditData.activityType as 'B2B' | 'B2C'),
+    hasGBP:                (rawAnswers?.gbp?.hasGBP             ?? ''),
+    reviewCount:           (rawAnswers?.gbp?.reviewCount        ?? ''),
+    averageRating:         (rawAnswers?.gbp?.averageRating      ?? ''),
+    respondsToReviews:     (rawAnswers?.gbp?.respondsToReviews  ?? ''),
+    hasOnlineBooking:      (rawAnswers?.funnel?.hasOnlineBooking ?? null),
+    hasWebsite:            (rawAnswers?.web?.hasWebsite          ?? null),
+    hasSEO:                (rawAnswers?.web?.hasSEO              ?? null),
+    platforms:             (rawAnswers?.social?.platforms        ?? []),
+    postsFrequency:        (rawAnswers?.social?.postsFrequency   ?? ''),
+    hasProfessionalPhotos: (rawAnswers?.branding?.hasProfessionalPhotos ?? null),
+    hasSocialProof:        (rawAnswers?.branding?.hasSocialProof ?? null),
+    hasContactForm:        (rawAnswers?.funnel?.hasContactForm   ?? null),
+  }
+
+  const weightedScore = calculateWeightedScore(rawScores, template, bonusCtx)
+  const percentile    = getSectorPercentile(weightedScore, template)
+
+  const globalRaw = auditData.scoreGlobalRaw
+    ?? (auditData.scoreSocial + auditData.scoreWeb + auditData.scoreGBP + auditData.scoreFunnel + auditData.scoreBranding)
+
+  const scores = {
+    global:    weightedScore,
+    globalRaw,
+    ...rawScores,
+  }
+
+  // AuditAnswers minimal pour estimateLostClients — qualification suffit
+  const minimalAnswers: AuditAnswers = rawAnswers ?? {
+    qualification: {
+      businessName: auditData.businessName,
+      city:         auditData.city,
+      sector:       auditData.sector,
+      activityType: auditData.activityType as 'B2B' | 'B2C',
+    },
+    social:   { platforms: [], postsFrequency: '' },
+    web:      { hasWebsite: null, isMobileFriendly: '', hasSEO: null },
+    gbp:      { hasGBP: '', reviewCount: '', averageRating: '', respondsToReviews: '' },
+    funnel:   { hasContactForm: null, hasVisibleCTA: null, hasOnlineBooking: null, hasLeadTracking: null },
+    branding: { hasProfessionalLogo: null, hasProfessionalPhotos: null, hasVisualConsistency: '', hasSocialProof: null },
+  }
+
+  const lostClients = estimateLostClients(minimalAnswers, scores, template)
+  const lostMessage = getLostClientsMessage(lostClients, auditData.city)
+
+  return { template, percentile, lostClients, lostMessage }
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ResultPage() {
   return (
@@ -42,21 +136,21 @@ export default function ResultPage() {
 
 function ResultPageInner() {
   const searchParams = useSearchParams()
-  const auditId = searchParams.get('id')
+  const auditId  = searchParams.get('id')
   const isMobile = useWindowWidth() < 960
 
   const [loadingAudit, setLoadingAudit] = useState(true)
-  const [auditData, setAuditData] = useState<AuditData | null>(null)
-  const [fetchError, setFetchError] = useState<string | null>(null)
-  const [isUnlocked, setIsUnlocked] = useState(false)
-  const [lead, setLead] = useState<LeadData | null>(null)
+  const [auditData,    setAuditData]    = useState<AuditData | null>(null)
+  const [fetchError,   setFetchError]   = useState<string | null>(null)
+  const [isUnlocked,   setIsUnlocked]   = useState(false)
+  const [lead,         setLead]         = useState<LeadData | null>(null)
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
 
   useEffect(() => {
-    if (!auditId) { setFetchError('Identifiant d\'audit manquant.'); setLoadingAudit(false); return }
+    if (!auditId) { setFetchError("Identifiant d'audit manquant."); setLoadingAudit(false); return }
     ;(async () => {
       try {
-        const res = await fetch(`/api/audit/${auditId}`)
+        const res  = await fetch(`/api/audit/${auditId}`)
         if (!res.ok) throw new Error(`Audit introuvable (${res.status})`)
         const data = await res.json()
         setAuditData(data.audit)
@@ -82,9 +176,13 @@ function ResultPageInner() {
   }
 
   const scores: AuditScores | null = auditData ? {
-    global: auditData.scoreGlobal, social: auditData.scoreSocial,
-    web: auditData.scoreWeb, gbp: auditData.scoreGBP,
-    funnel: auditData.scoreFunnel, branding: auditData.scoreBranding,
+    global:    auditData.scoreGlobal,
+    globalRaw: auditData.scoreGlobalRaw ?? auditData.scoreGlobal,
+    social:    auditData.scoreSocial,
+    web:       auditData.scoreWeb,
+    gbp:       auditData.scoreGBP,
+    funnel:    auditData.scoreFunnel,
+    branding:  auditData.scoreBranding,
   } : null
 
   const { strengths, weaknesses } = deriveTagsFromScores(scores)
@@ -92,23 +190,50 @@ function ResultPageInner() {
   if (loadingAudit) return <LoadingScreen />
   if (fetchError || !auditData || !scores) return <ErrorScreen message={fetchError ?? 'Audit introuvable.'} />
 
+  // ── Données sectorielles : DB si disponibles, sinon calcul fallback ────────
+  // Fallback calculé toujours (pas seulement unlocked) — LostClientsCard visible dès le résultat
+  const fallback    = computeFallbackSectorData(auditData)
+  const template    = fallback.template
+
+  const lostClients: LostClientsEstimate =
+    auditData.lostClientsJSON ?? fallback.lostClients
+
+  const lostMessage = auditData.lostClientsJSON
+    ? getLostClientsMessage(auditData.lostClientsJSON, auditData.city)
+    : fallback.lostMessage
+
+  const sectorPercentile: number =
+    auditData.sectorPercentile ?? fallback.percentile.percentile
+
+  const percentileLabel: string =
+    auditData.sectorPercentile
+      ? (auditData.sectorPercentile >= 75
+          ? `Top ${100 - auditData.sectorPercentile}% de votre secteur`
+          : `Meilleur que ${auditData.sectorPercentile}% des entreprises de votre secteur`)
+      : fallback.percentile.label
+
+  const sectorBenchmarks: SectorBenchmarks =
+    auditData.sectorBenchmarks ?? fallback.template.benchmarks
+
+  const sectorTips: Record<string, string> =
+    (auditData.sectorTips && Object.keys(auditData.sectorTips).length > 0)
+      ? auditData.sectorTips
+      : fallback.template.sectorTips
+
   return (
     <div style={{ fontFamily: 'Inter, sans-serif', background: '#F5F0E8', minHeight: '100vh' }}>
       <ResultNav isUnlocked={isUnlocked} auditId={auditId ?? ''} isMobile={isMobile} />
 
       <div style={{ paddingTop: 64 }}>
 
-        {/* ══ ÉTAT LOCKED ══════════════════════════════════════ */}
+        {/* ══ ÉTAT LOCKED ══════════════════════════════════════════════════ */}
         {!isUnlocked && (
           <div style={{
             display: 'grid',
-            // Sur mobile : 1 colonne (partie floutée cachée)
-            // Sur desktop : 1fr + 440px
             gridTemplateColumns: isMobile ? '1fr' : '1fr 440px',
             minHeight: 'calc(100vh - 64px)',
             animation: 'fadeUp 0.5s ease both',
           }}>
-            {/* Gauche : aperçu flou (desktop uniquement) */}
             {!isMobile && (
               <div style={{ padding: '56px 60px', position: 'relative', overflow: 'hidden', background: '#F5F0E8' }}>
                 <div style={{ filter: 'blur(8px)', pointerEvents: 'none', userSelect: 'none' }}>
@@ -138,39 +263,71 @@ function ResultPageInner() {
                 </div>
               </div>
             )}
-
-            {/* Droite (ou seule colonne sur mobile) : UnlockForm */}
             <UnlockForm auditId={auditId ?? ''} previewScore={scores.global} onUnlocked={handleUnlocked} />
           </div>
         )}
 
-        {/* ══ ÉTAT UNLOCKED ════════════════════════════════════ */}
+        {/* ══ ÉTAT UNLOCKED ════════════════════════════════════════════════ */}
         {isUnlocked && (
           <div style={{ animation: 'fadeUp 0.5s ease both' }}>
-            {/* Score + barres */}
+
+            {/* Score + barres piliers */}
             <ScoreDisplay scores={scores} businessName={auditData.businessName} city={auditData.city} isUnlocked={true} />
 
             {/* Body */}
             <div style={{
-              padding: isMobile ? '32px 20px' : '48px 72px',
-              display: 'grid',
+              padding:             isMobile ? '32px 20px' : '48px 72px',
+              display:             'grid',
               gridTemplateColumns: isMobile ? '1fr' : '1fr 360px',
-              gap: isMobile ? 24 : 40,
+              gap:                 isMobile ? 24 : 40,
             }}>
-              {/* Colonne principale */}
+
+              {/* ── Colonne principale ──────────────────────────────────── */}
               <div>
+
+                {/* ── Clients perdus chiffrés (v2) ── */}
+                <LostClientsCard
+                  estimate={lostClients}
+                  headline={lostMessage.headline}
+                  subline={lostMessage.subline}
+                  urgency={lostMessage.urgency}
+                  sector={auditData.sector}
+                  city={auditData.city}
+                  showDetails={true}
+                />
+
+                {/* ── Benchmark sectoriel (v2) ── */}
+                <SectorBenchmark
+                  score={auditData.scoreGlobal}
+                  sectorLabel={auditData.sector}
+                  sectorTemplateId={auditData.sectorTemplateId ?? template.id}
+                  percentile={sectorPercentile}
+                  percentileLabel={percentileLabel}
+                  benchmarks={sectorBenchmarks}
+                  sectorTips={sectorTips}
+                />
+
+                {/* ── Radar chart ── */}
                 <div style={{ marginBottom: 32 }}>
-                  <RadarChart scores={{ social: scores.social, web: scores.web, gbp: scores.gbp, funnel: scores.funnel, branding: scores.branding }} height={isMobile ? 260 : 300} />
+                  <RadarChart
+                    scores={{ social: scores.social, web: scores.web, gbp: scores.gbp, funnel: scores.funnel, branding: scores.branding }}
+                    height={isMobile ? 260 : 300}
+                  />
                 </div>
+
+                {/* ── Recommandations ── */}
                 <Recommendations items={recommendations} />
               </div>
 
-              {/* Sidebar */}
+              {/* ── Sidebar ─────────────────────────────────────────────── */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
                 {/* Points forts */}
                 <div style={{ background: '#FFFFFF', border: '1.5px solid rgba(9,38,118,0.1)', borderRadius: 16, padding: isMobile ? 20 : 28, boxShadow: '0 2px 12px rgba(5,10,52,0.06)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2B9348' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(43,147,72,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2B9348" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
+                    </div>
                     <span style={{ fontFamily: 'Syne, sans-serif', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#2B9348' }}>
                       Points forts
                     </span>
@@ -181,34 +338,67 @@ function ResultPageInner() {
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
                         {tag}
                       </span>
-                    )) : <span style={{ fontSize: 13, color: '#7A82A0' }}>À améliorer dans l'ensemble</span>}
+                    )) : (
+                      <span style={{ fontSize: 13, color: '#7A82A0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7A82A0" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
+                        À améliorer dans l&apos;ensemble
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 {/* Axes d'amélioration */}
                 <div style={{ background: '#FFFFFF', border: '1.5px solid rgba(9,38,118,0.1)', borderRadius: 16, padding: isMobile ? 20 : 28, boxShadow: '0 2px 12px rgba(5,10,52,0.06)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E03131' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(224,49,49,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E03131" strokeWidth="2.5"><path d="M12 9v4M12 17h.01" /><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                    </div>
                     <span style={{ fontFamily: 'Syne, sans-serif', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: '#E03131' }}>
-                      Axes d'amélioration
+                      Axes d&apos;amélioration
                     </span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
                     {weaknesses.length > 0 ? weaknesses.map((tag, i) => (
-                      <span key={i} style={{ padding: '6px 14px', borderRadius: 100, fontSize: 12, fontWeight: 500, background: 'rgba(224,49,49,0.06)', border: '1px solid rgba(224,49,49,0.15)', color: '#E03131' }}>
+                      <span key={i} style={{ padding: '6px 14px', borderRadius: 100, fontSize: 12, fontWeight: 500, background: 'rgba(224,49,49,0.06)', border: '1px solid rgba(224,49,49,0.15)', color: '#E03131', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                         {tag}
                       </span>
-                    )) : <span style={{ fontSize: 13, color: '#7A82A0' }}>Pas d'axe critique détecté 🎉</span>}
+                    )) : (
+                      <span style={{ fontSize: 13, color: '#2B9348', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2B9348" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" /></svg>
+                        Pas d&apos;axe critique détecté — bonne base !
+                      </span>
+                    )}
                   </div>
                 </div>
 
+                {/* Concurrents locaux (v3) */}
+                {auditData.competitorsJSON && (
+                  <CompetitorCard
+                    analysis={auditData.competitorsJSON}
+                    clientScore={scores.global}
+                    businessName={auditData.businessName}
+                  />
+                )}
+
                 {/* Booking CTA */}
-                <BookingCTA calLink={process.env.NEXT_PUBLIC_CAL_LINK} mode="popup" score={scores.global} auditId={auditId ?? ''} businessName={auditData.businessName} />
+                <BookingCTA
+                  calLink={process.env.NEXT_PUBLIC_CAL_LINK}
+                  mode="popup"
+                  score={scores.global}
+                  auditId={auditId ?? ''}
+                  businessName={auditData.businessName}
+                />
               </div>
             </div>
 
             {/* Footer CTA */}
-            <FooterCTABand score={scores.global} auditId={auditId ?? ''} businessName={auditData.businessName} isMobile={isMobile} />
+            <FooterCTABand
+              score={scores.global}
+              auditId={auditId ?? ''}
+              businessName={auditData.businessName}
+              isMobile={isMobile}
+            />
           </div>
         )}
       </div>
@@ -373,14 +563,14 @@ function ErrorScreen({ message }: { message: string }) {
 
 function deriveTagsFromScores(scores: AuditScores | null): { strengths: string[]; weaknesses: string[] } {
   if (!scores) return { strengths: [], weaknesses: [] }
-  const strengths: string[] = []
+  const strengths:  string[] = []
   const weaknesses: string[] = []
   const piliers: Array<{ key: keyof AuditScores; tags: { strong: string[]; weak: string[] } }> = [
-    { key: 'social', tags: { strong: ['Présence réseaux actifs', 'Bonne fréquence de publication'], weak: ['Réseaux inactifs', 'Pas de présence sociale'] } },
-    { key: 'web', tags: { strong: ['Site web performant', 'Site mobile-friendly'], weak: ['Pas de site web', 'Pas de SEO'] } },
-    { key: 'gbp', tags: { strong: ['Fiche Google active', 'Bonne note Google'], weak: ['Pas de fiche Google', 'Peu d\'avis clients'] } },
-    { key: 'funnel', tags: { strong: ['CTAs visibles', 'Prise de RDV en ligne'], weak: ['Pas de formulaire', 'Pas de CRM'] } },
-    { key: 'branding', tags: { strong: ['Branding professionnel', 'Preuves sociales visibles'], weak: ['Image non professionnelle', 'Pas de témoignages'] } },
+    { key: 'social',   tags: { strong: ['Présence réseaux actifs', 'Bonne fréquence de publication'], weak: ['Réseaux inactifs', 'Pas de présence sociale'] } },
+    { key: 'web',      tags: { strong: ['Site web performant', 'Site mobile-friendly'],               weak: ['Pas de site web', 'Pas de SEO'] } },
+    { key: 'gbp',      tags: { strong: ['Fiche Google active', 'Bonne note Google'],                  weak: ['Pas de fiche Google', "Peu d'avis clients"] } },
+    { key: 'funnel',   tags: { strong: ['CTAs visibles', 'Prise de RDV en ligne'],                   weak: ['Pas de formulaire', 'Pas de CRM'] } },
+    { key: 'branding', tags: { strong: ['Branding professionnel', 'Preuves sociales visibles'],       weak: ['Image non professionnelle', 'Pas de témoignages'] } },
   ]
   piliers.forEach(({ key, tags }) => {
     const score = scores[key] as number

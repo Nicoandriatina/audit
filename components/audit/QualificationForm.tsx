@@ -1,10 +1,5 @@
 'use client'
 
-/**
- * QualificationForm.tsx — Étape 1 : qualification entreprise
- * Responsive : breakpoint 960px (sidebar cachée, layout colonne)
- */
-
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWindowWidth } from '@/lib/useWindowWidth'

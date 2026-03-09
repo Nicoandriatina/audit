@@ -1,14 +1,5 @@
 'use client'
 
-/**
- * RadarChart.tsx
- * Radar chart des 5 piliers — utilise Recharts.
- * Dépendance : npm install recharts
- *
- * Usage :
- *   <RadarChart scores={{ social: 14, web: 10, gbp: 16, funnel: 10, branding: 15 }} />
- */
-
 import {
   Radar,
   RadarChart as RechartsRadar,

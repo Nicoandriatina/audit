@@ -2,13 +2,6 @@
 
 import { useState, useEffect } from 'react'
 
-/**
- * useWindowWidth — retourne la largeur de la fenêtre en temps réel.
- * SSR-safe : retourne 1440 côté serveur pour éviter le flash mobile.
- *
- * Usage :
- *   const isMobile = useWindowWidth() < 960
- */
 export function useWindowWidth(): number {
   const [width, setWidth] = useState(1440)
 

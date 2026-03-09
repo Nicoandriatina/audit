@@ -1,9 +1,5 @@
 'use client'
 
-/**
- * WizardStep.tsx — Conteneur générique pour chaque étape du wizard.
- * Responsive : breakpoint 960px (sidebar cachée, barre de progression mobile)
- */
 
 import React from 'react'
 import { useWindowWidth } from '@/lib/useWindowWidth'

@@ -1,14 +1,5 @@
 'use client'
 
-/**
- * Recommendations.tsx
- * Affiche les 3 recommandations prioritaires générées par /api/audit/unlock.
- * Format : problème identifié + impact business + action concrète.
- *
- * Usage :
- *   <Recommendations items={recommendations} />
- */
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Recommendation {

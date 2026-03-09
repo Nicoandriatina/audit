@@ -1,22 +1,5 @@
 'use client'
 
-/**
- * BookingCTA.tsx
- * CTA final de conversion — réservation diagnostic stratégique via Cal.com.
- * Deux modes : popup embed Cal.com ou redirection externe.
- *
- * Usage :
- *   <BookingCTA
- *     calLink="https://cal.com/cabinet-stratege/diagnostic"
- *     mode="popup"
- *     auditId="clxxx"
- *     score={58}
- *   />
- *
- * Dépendance optionnelle popup : npm install @calcom/embed-react
- * Si non installé, le composant bascule automatiquement en mode "redirect".
- */
-
 import { useState } from 'react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────

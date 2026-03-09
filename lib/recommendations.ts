@@ -1,10 +1,4 @@
 
-/**
- * lib/recommendations.ts
- * Génère les 3 recommandations prioritaires à partir des scores + réponses.
- * Importé par /api/audit/unlock/route.ts
- */
-
 import type { AuditAnswers, AuditScores, ActivityType } from './scoring'
 import type { Recommendation } from '@/components/audit/Recommendations'
 

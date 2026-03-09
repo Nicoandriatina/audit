@@ -24,6 +24,14 @@ model Audit {
   scoreFunnel   Int @default(0)
   scoreBranding Int @default(0)
 
+  scoreGlobalRaw Int @default(0)
+  
+  sectorTemplateId String?
+  sectorPercentile Int?
+
+  lostClientsJSON Json?
+  competitorsJSON Json?
+
   fullName String?
   email    String?
   phone    String?
@@ -36,4 +44,17 @@ model Audit {
   @@index([email])
   @@index([createdAt])
   @@index([isUnlocked])
+  @@index([sector])
+  @@index([sectorTemplateId])
+}
+// ─── AdminSession ─────────────────────────────────────────────────────────────
+
+model AdminSession {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([token])
+  @@index([expiresAt])
 }
