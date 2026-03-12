@@ -1,18 +1,3 @@
-/**
- * app/api/audit/[id]/competitors/route.ts
- * GET /api/audit/[id]/competitors
- *
- * Retourne l'analyse concurrentielle d'un audit.
- *
- * Logique :
- *  - Si competitorsJSON est déjà en DB → retourner directement (fast path)
- *  - Si null (audit créé avant Sprint 3) → générer à la volée + persister
- *
- * Sécurité :
- *  - Accessible sans auth (même pattern que GET /api/audit/[id])
- *  - Requiert isUnlocked = true pour éviter l'accès avant déblocage
- */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateCompetitors, type CompetitorsAnalysis } from '@/lib/competitors'

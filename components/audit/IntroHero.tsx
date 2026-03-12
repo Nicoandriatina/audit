@@ -182,7 +182,7 @@ export default function IntroHero({ startUrl = '/audit/start' }: IntroHeroProps)
 }
 
 const TRUST_ITEMS = [
-  { label: '3 minutes chrono', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg> },
+  { label: '5 minutes chrono', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg> },
   { label: 'Résultat immédiat', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
   { label: 'Rapport PDF premium', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg> },
   { label: '100% confidentiel', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg> },
@@ -190,6 +190,6 @@ const TRUST_ITEMS = [
 
 const STATS = [
   { num: '+200', label: 'Audits réalisés' },
-  { num: '3 min', label: 'Temps moyen' },
+  { num: '5 min', label: 'Temps moyen' },
   { num: '94%', label: 'Satisfaction client' },
 ]

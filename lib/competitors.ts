@@ -1,21 +1,3 @@
-/**
- * lib/competitors.ts  — Sprint 3
- *
- * Génère 3 "concurrents locaux" fictifs mais crédibles à partir des benchmarks
- * sectoriels de sector-templates.ts.
- *
- * Design decisions :
- *  - Zéro API externe — données générées depuis les benchmarks sectoriels.
- *  - Génération déterministe via seed (auditId) → résultat identique à chaque appel.
- *  - Pas de dépendance sur lib/scoring.ts (évite le cycle de dépendances).
- *  - CompetitorResult est exporté pour usage dans les routes et composants.
- *
- * Chaîne d'imports :
- *   competitors.ts → sector-templates.ts  ✓
- *   competitors.ts → audit-types.ts       ✓
- *   competitors.ts → types/audit.ts       ✓ (AuditAnswers)
- *   competitors.ts → scoring.ts           ✗ (jamais)
- */
 
 import { getSectorTemplate, type SectorTemplate } from './sector-templates'
 import type { AuditScores } from './audit-types'

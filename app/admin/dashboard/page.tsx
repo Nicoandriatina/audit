@@ -152,6 +152,103 @@ export default function AdminDashboard() {
 
   const APP_URL = typeof window !== 'undefined' ? window.location.origin : ''
 
+  // ── Export CSV ────────────────────────────────────────────────────────────
+  const [isExporting, setIsExporting] = useState(false)
+
+  const exportToCSV = async () => {
+    setIsExporting(true)
+    try {
+      const params = new URLSearchParams({ page: '1', limit: '100' })
+      if (search)         params.set('search',   search)
+      if (filterSector)   params.set('sector',   filterSector)
+      if (filterUnlocked) params.set('unlocked', filterUnlocked)
+
+      const res  = await fetch(`/api/admin/audits?${params}`)
+      if (!res.ok) throw new Error('Erreur serveur')
+      const json: ApiResponse = await res.json()
+
+      // ── Séparateur point-virgule pour Excel FR ──
+      const SEP = ';'
+
+      // ── Colonnes dans un ordre logique : identité → contact → scores → meta ──
+      const headers = [
+        // Identité entreprise
+        'Date de soumission',
+        'Nom de l\'entreprise',
+        'Ville',
+        'Secteur d\'activité',
+        'Type d\'activité',
+        // Statut lead
+        'Statut',
+        'Percentile secteur (%)',
+        // Contact (disponible si débloqué)
+        'Nom du contact',
+        'Email',
+        'Téléphone',
+        // Scores
+        'Score global (/100)',
+        'Score réseaux sociaux (/100)',
+        'Score site web (/100)',
+        'Score Google Business (/100)',
+        'Score tunnel de vente (/100)',
+        'Score branding (/100)',
+      ]
+
+      // ── Escape pour CSV avec séparateur ; ──
+      const escape = (v: unknown) => {
+        const s = v == null ? '' : String(v)
+        // Guillemets si la valeur contient ; " ou saut de ligne
+        return s.includes(SEP) || s.includes('"') || s.includes('\n')
+          ? `"${s.replace(/"/g, '""')}"`
+          : s
+      }
+
+      // ── Formatage date complet : 13/03/2026 ──
+      const fmtDate = (iso: string) =>
+        new Date(iso).toLocaleDateString('fr-FR', {
+          day:   '2-digit',
+          month: '2-digit',
+          year:  'numeric',
+        })
+
+      const rows = json.audits.map(a => [
+        fmtDate(a.createdAt),
+        a.businessName,
+        a.city            || '',
+        a.sector          || '',
+        a.activityType    || '',
+        a.isUnlocked ? 'Débloqué' : 'Non débloqué',
+        a.sectorPercentile != null ? a.sectorPercentile : '',
+        a.fullName        || '',
+        a.email           || '',
+        a.phone           || '',
+        a.scoreGlobal,
+        a.scoreSocial,
+        a.scoreWeb,
+        a.scoreGBP,
+        a.scoreFunnel,
+        a.scoreBranding,
+      ].map(escape).join(SEP))
+
+      const bom        = '\uFEFF' // BOM UTF-8 → Excel ouvre sans conversion
+      const csvContent = bom + [headers.join(SEP), ...rows].join('\r\n')
+      const blob       = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url        = URL.createObjectURL(blob)
+      const link       = document.createElement('a')
+      const today      = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')
+      link.href        = url
+      link.download    = `Rapport_audits-${today}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Export CSV failed', err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -296,16 +393,77 @@ export default function AdminDashboard() {
         {/* ── Header ── */}
         <div style={{
           marginBottom: 28,
+          display: 'flex',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          justifyContent: 'space-between',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 14 : 0,
           opacity: mounted ? 1 : 0,
           transform: mounted ? 'translateY(0)' : 'translateY(16px)',
           transition: 'opacity 0.5s ease, transform 0.5s cubic-bezier(0.22,1,0.36,1)',
         }}>
-          <h1 style={{ margin: '0 0 4px', fontSize: isMobile ? 22 : 28, fontWeight: 800, color: '#050A34', fontFamily: 'Syne, sans-serif' }}>
-            Audits & Leads
-          </h1>
-          <p style={{ margin: 0, fontSize: 13, color: '#7A82A0' }}>
-            Vue d'ensemble de tous les audits soumis
-          </p>
+          <div>
+            <h1 style={{ margin: '0 0 4px', fontSize: isMobile ? 22 : 28, fontWeight: 800, color: '#050A34', fontFamily: 'Syne, sans-serif' }}>
+              Audits & Leads
+            </h1>
+            <p style={{ margin: 0, fontSize: 13, color: '#7A82A0' }}>
+              Vue d'ensemble de tous les audits soumis
+            </p>
+          </div>
+
+          {/* ── Bouton Export CSV ── */}
+          <button
+            onClick={exportToCSV}
+            disabled={isExporting || !data}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: isMobile ? '10px 18px' : '10px 20px',
+              background: isExporting ? 'rgba(43,147,72,0.08)' : '#2B9348',
+              border: isExporting ? '1.5px solid rgba(43,147,72,0.25)' : '1.5px solid #2B9348',
+              borderRadius: 10, cursor: isExporting || !data ? 'not-allowed' : 'pointer',
+              fontSize: 13, fontWeight: 700,
+              color: isExporting ? '#2B9348' : 'white',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+              alignSelf: isMobile ? 'flex-start' : 'center',
+              boxShadow: isExporting ? 'none' : '0 2px 12px rgba(43,147,72,0.25)',
+              opacity: !data ? 0.5 : 1,
+            }}
+            onMouseEnter={e => {
+              if (!isExporting && data) {
+                e.currentTarget.style.background = '#238A3C'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 4px 18px rgba(43,147,72,0.35)'
+              }
+            }}
+            onMouseLeave={e => {
+              if (!isExporting && data) {
+                e.currentTarget.style.background = '#2B9348'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 2px 12px rgba(43,147,72,0.25)'
+              }
+            }}
+          >
+            {isExporting ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                  style={{ animation: 'spin 0.8s linear infinite' }}>
+                  <path d="M23 4v6h-6M1 20v-6h6"/>
+                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                Export en cours…
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="7,10 12,15 17,10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Exporter CSV
+              </>
+            )}
+          </button>
         </div>
 
         {/* ── KPI Cards ── */}
@@ -503,7 +661,94 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div style={{ background: 'white', borderRadius: 14, border: '1px solid rgba(9,38,118,0.08)', overflow: 'hidden' }}>
-              <div style={{ overflowX: 'auto' as const }}>
+              {isMobile ? (
+                /* ── Mobile card list ── */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {data.audits.map((audit, i) => (
+                    <div
+                      key={audit.id}
+                      style={{
+                        padding: '16px 18px',
+                        borderBottom: i < data.audits.length - 1 ? '1px solid #F5F0E8' : 'none',
+                        animation: `rowIn 0.35s cubic-bezier(0.22,1,0.36,1) ${i * 40}ms both`,
+                      }}
+                    >
+                      {/* Row 1: entreprise + badge statut */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
+                          <div style={{ fontWeight: 700, color: '#050A34', fontSize: 14, marginBottom: 2 }}>{audit.businessName}</div>
+                          {audit.city && <div style={{ fontSize: 11, color: '#7A82A0' }}>{audit.city}</div>}
+                        </div>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, flexShrink: 0,
+                          background: audit.isUnlocked ? 'rgba(43,147,72,0.10)' : 'rgba(122,130,160,0.08)',
+                          color: audit.isUnlocked ? '#2B9348' : '#7A82A0',
+                          border: `1px solid ${audit.isUnlocked ? 'rgba(43,147,72,0.2)' : 'rgba(122,130,160,0.15)'}`,
+                        }}>
+                          {audit.isUnlocked ? '✓ Débloqué' : 'Non débloqué'}
+                        </span>
+                      </div>
+
+                      {/* Row 2: secteur + score + date */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' as const }}>
+                        <span style={{ fontSize: 11, color: '#3D4A6B', background: 'rgba(9,38,118,0.05)', padding: '3px 9px', borderRadius: 100 }}>
+                          {audit.sector || '—'}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                          <span style={{ fontSize: 15, fontWeight: 800, color: scoreColor(audit.scoreGlobal), fontFamily: 'Syne, sans-serif' }}>{audit.scoreGlobal}</span>
+                          <span style={{ fontSize: 10, color: '#7A82A0' }}>/100</span>
+                        </div>
+                        <span style={{ fontSize: 11, color: '#7A82A0', marginLeft: 'auto' }}>{formatDateShort(audit.createdAt)}</span>
+                      </div>
+
+                      {/* Row 3: lead info + actions */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {audit.isUnlocked && audit.fullName ? (
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: '#050A34' }}>{audit.fullName}</div>
+                              {audit.email && (
+                                <button
+                                  onClick={() => copyEmail(audit.email!, audit.id)}
+                                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11, color: copiedId === audit.id ? '#2B9348' : '#085CF0', display: 'flex', alignItems: 'center', gap: 4 }}
+                                >
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                  {copiedId === audit.id ? 'Copié !' : audit.email}
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#C0C6D9' }}>—</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <a
+                            href={`/audit/result?id=${audit.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: 'rgba(8,92,240,0.08)', border: '1px solid rgba(8,92,240,0.15)', borderRadius: 7, fontSize: 11, fontWeight: 600, color: '#085CF0', textDecoration: 'none' }}
+                          >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            Voir
+                          </a>
+                          {audit.isUnlocked && (
+                            <a
+                              href={`${APP_URL}/api/pdf/${audit.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: 'rgba(43,147,72,0.07)', border: '1px solid rgba(43,147,72,0.15)', borderRadius: 7, fontSize: 11, fontWeight: 600, color: '#2B9348', textDecoration: 'none' }}
+                            >
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                              PDF
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' as const }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: '#F8F7F5', borderBottom: '1.5px solid #EDE8DF' }}>
@@ -630,19 +875,20 @@ export default function AdminDashboard() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              )}
 
               {/* Pagination */}
               {data.totalPages > 1 && (
-                <div style={{ padding: '14px 20px', borderTop: '1px solid #EDE8DF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ padding: '14px 20px', borderTop: '1px solid #EDE8DF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' as const }}>
                   <span style={{ fontSize: 12, color: '#7A82A0' }}>
                     Page {data.page} sur {data.totalPages}
                   </span>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
                     <PageBtn onClick={() => setPage(1)} disabled={page === 1} label="«" />
                     <PageBtn onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} label="‹" />
-                    {Array.from({ length: Math.min(5, data.totalPages) }, (_, i) => {
-                      const p = Math.max(1, Math.min(data.totalPages - 4, page - 2)) + i
+                    {Array.from({ length: Math.min(isMobile ? 3 : 5, data.totalPages) }, (_, i) => {
+                      const p = Math.max(1, Math.min(data.totalPages - (isMobile ? 2 : 4), page - (isMobile ? 1 : 2))) + i
                       return (
                         <PageBtn key={p} label={String(p)} onClick={() => setPage(p)} disabled={false} active={p === page} />
                       )
