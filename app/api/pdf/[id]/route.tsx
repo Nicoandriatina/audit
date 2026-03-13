@@ -42,6 +42,14 @@ const C = {
   green:     '#2B9348',
 }
 
+// ─── Helper couleur avec alpha (react-pdf ne supporte pas hex 8 chars) ─────────
+function hexAlpha(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function scoreColor(score: number, max = 100): string {
@@ -175,7 +183,7 @@ const S = StyleSheet.create({
   ctaBox: {
     backgroundColor: C.navy, margin: '24 56 0', borderRadius: 14, padding: '26 32',
     display: 'flex', flexDirection: 'column', alignItems: 'center',
-    border: '1.5 solid rgba(8,92,240,0.25)',
+    borderWidth: 1.5, borderColor: 'rgba(8,92,240,0.25)',
   },
   ctaTitle: { fontSize: 15, fontFamily: 'Helvetica-Bold', color: C.white, marginBottom: 8, textAlign: 'center' },
   ctaSub: { fontSize: 9.5, color: 'rgba(175,233,253,0.60)', textAlign: 'center', lineHeight: 1.7, marginBottom: 16, maxWidth: 380 },
@@ -194,9 +202,14 @@ const S = StyleSheet.create({
 // ─── Reusable sub-components ──────────────────────────────────────────────────
 
 function ScoreRing({ score, color, size = 80 }: { score: number; color: string; size?: number }) {
-  const r = (size / 2) - 5
-  const circ = 2 * Math.PI * r
-  const filled = (score / 100) * circ
+  const r      = (size / 2) - 5
+  const circ   = 2 * Math.PI * r
+  // Guard: score clampé 0–100, minimum 0.5 pour éviter dash(0) qui crash le renderer
+  const safeScore = Math.max(0, Math.min(100, score ?? 0))
+  const filled    = Math.max(0.5, (safeScore / 100) * circ)
+  const gap       = Math.max(0.5, circ - filled)
+  // strokeDasharray = STRING séparée par espace (react-pdf appelle .split() en interne)
+  const dashStr   = `${filled.toFixed(2)} ${gap.toFixed(2)}`
   return (
     <View style={{ width: size, height: size, position: 'relative' }}>
       <Svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
@@ -204,7 +217,7 @@ function ScoreRing({ score, color, size = 80 }: { score: number; color: string; 
         <Circle
           cx={size/2} cy={size/2} r={r}
           fill="none" stroke={color} strokeWidth="5"
-          strokeDasharray={`${filled} ${circ - filled}`}
+          strokeDasharray={dashStr}
           strokeLinecap="round"
           transform={`rotate(-90 ${size/2} ${size/2})`}
         />
@@ -226,7 +239,7 @@ function PilierBar({ name, score, max = 20 }: { name: string; score: number; max
       <View style={S.pilierTopRow}>
         <Text style={S.pilierName}>{name}</Text>
         <View style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={{ backgroundColor: `${color}18`, borderRadius: 100, padding: '2 8' }}>
+          <View style={{ backgroundColor: hexAlpha(color, 0.09), borderRadius: 100, padding: '2 8' }}>
             <Text style={{ fontSize: 7.5, color, fontFamily: 'Helvetica-Bold' }}>{lbl}</Text>
           </View>
           <Text style={[S.pilierScore, { color }]}>{score}/{max}</Text>
@@ -425,7 +438,7 @@ function AuditPDF(props: AuditPDFProps) {
             <Text style={S.pageHeaderTitle}>Score global : {scoreGlobal}/100</Text>
             <Text style={S.pageHeaderSub}>{levelMsg}</Text>
           </View>
-          <View style={{ backgroundColor: `${globalColor}18`, borderRadius: 100, padding: '6 16', alignSelf: 'center', flexShrink: 0 }}>
+          <View style={{ backgroundColor: hexAlpha(globalColor, 0.09), borderRadius: 100, padding: '6 16', alignSelf: 'center', flexShrink: 0 }}>
             <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: globalColor }}>{levelLabel}</Text>
           </View>
         </View>
@@ -435,7 +448,7 @@ function AuditPDF(props: AuditPDFProps) {
           {piliers.map((p) => <PilierBar key={p.name} name={p.name} score={p.score} max={20} />)}
         </View>
 
-        <View style={[S.twoCol, { paddingHorizontal: 56, marginTop: 6 }]}>
+        <View style={[S.twoCol, { paddingLeft: 56, paddingRight: 56, marginTop: 6 }]}>
           <View style={[S.col, S.card]}>
             <SectionHeader title="Points forts" color={C.green} />
             <View style={S.tagRow}>
@@ -491,12 +504,12 @@ function AuditPDF(props: AuditPDFProps) {
                 <SectionHeader title="Benchmark sectoriel" />
                 <View style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <Text style={{ fontSize: 10, color: C.textMuted }}>Position dans votre secteur</Text>
-                  <View style={{ backgroundColor: `${benchColor}15`, borderRadius: 100, padding: '4 12' }}>
+                  <View style={{ backgroundColor: hexAlpha(benchColor, 0.08), borderRadius: 100, padding: '4 12' }}>
                     <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: benchColor }}>{benchLabel}</Text>
                   </View>
                 </View>
                 <View style={{ marginBottom: 6 }}>
-                  <View style={{ height: 12, backgroundColor: C.cream2, borderRadius: 6, position: 'relative', overflow: 'hidden' }}>
+                  <View style={{ height: 12, backgroundColor: C.cream2, borderRadius: 6, position: 'relative' }}>
                     <View style={{ position: 'absolute', left: 0,    top: 0, height: '100%', width: '25%', backgroundColor: 'rgba(224,49,49,0.12)' }} />
                     <View style={{ position: 'absolute', left: '25%', top: 0, height: '100%', width: '25%', backgroundColor: 'rgba(232,137,12,0.12)' }} />
                     <View style={{ position: 'absolute', left: '50%', top: 0, height: '100%', width: '25%', backgroundColor: 'rgba(8,92,240,0.10)' }} />
@@ -515,7 +528,7 @@ function AuditPDF(props: AuditPDFProps) {
                     { label: 'Moyenne secteur', value: sectorBenchmarks.avgScore,     color: C.orange },
                     { label: 'Top 25% secteur', value: sectorBenchmarks.topQuartile,  color: C.green },
                   ].map((chip) => (
-                    <View key={chip.label} style={[S.metricChip, chip.highlight ? { border: `1.5 solid ${chip.color}` } : {}]}>
+                    <View key={chip.label} style={[S.metricChip, chip.highlight ? { borderWidth: 1.5, borderColor: chip.color } : {}]}>
                       <Text style={[S.metricChipValue, { color: chip.color }]}>
                         {chip.value}<Text style={{ fontSize: 9, fontFamily: 'Helvetica', color: C.textMuted }}>/100</Text>
                       </Text>
@@ -553,7 +566,7 @@ function AuditPDF(props: AuditPDFProps) {
 
                 {/* Rank badge */}
                 <View style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                  <View style={{ backgroundColor: `${rankColor}12`, borderRadius: 100, padding: '4 14', border: `1 solid ${rankColor}30` }}>
+                  <View style={{ backgroundColor: hexAlpha(rankColor, 0.07), borderRadius: 100, padding: '4 14', borderWidth: 1, borderColor: hexAlpha(rankColor, 0.19) }}>
                     <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: rankColor }}>{rankLabel}</Text>
                   </View>
                   <Text style={{ fontSize: 8.5, color: C.textMuted }}>
@@ -679,8 +692,8 @@ function AuditPDF(props: AuditPDFProps) {
 
                 {/* Carte principale CA perdu — layout horizontal compact */}
                 <View style={{
-                  backgroundColor: `${urgColor}0D`,
-                  border: `1.5 solid ${urgColor}30`,
+                  backgroundColor: hexAlpha(urgColor, 0.05),
+                  borderWidth: 1.5, borderColor: hexAlpha(urgColor, 0.19),
                   borderRadius: 12, padding: '16 22',
                   marginBottom: 10,
                   display: 'flex', flexDirection: 'row',
@@ -700,7 +713,7 @@ function AuditPDF(props: AuditPDFProps) {
                       Fourchette : {fmtCHF(lc.range.low)} — {fmtCHF(lc.range.high)} par an
                     </Text>
                   </View>
-                  <View style={{ width: 1, height: 52, backgroundColor: `${urgColor}22`, marginHorizontal: 20 }} />
+                  <View style={{ width: 1, height: 52, backgroundColor: hexAlpha(urgColor, 0.13), marginLeft: 20, marginRight: 20 }} />
                   <View style={{ alignItems: 'center', minWidth: 72 }}>
                     <Text style={{ fontSize: 32, fontFamily: 'Helvetica-Bold', color: urgColor, lineHeight: 1 }}>
                       {lc.monthlyLostLeads}
@@ -750,7 +763,7 @@ function AuditPDF(props: AuditPDFProps) {
           })()}
 
           {/* ══ PLAN D'ACTION · 90 JOURS — CTA PREMIUM ══ */}
-          <View style={{ margin: '16 56 0', borderRadius: 14, overflow: 'hidden', border: '1.5 solid rgba(8,92,240,0.30)' }}>
+          <View style={{ margin: '16 56 0', borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(8,92,240,0.30)' }}>
 
             {/* Bande accent top */}
             <View style={{ height: 3, backgroundColor: C.blue }} />
